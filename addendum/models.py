@@ -5,10 +5,9 @@ from django.dispatch import receiver
 from django.conf import settings
 
 
+get_cache_prefix = lambda: 'snippet:'
 if hasattr(settings, 'ADDENDUM_CACHE_PREFIX'):
     get_cache_prefix = settings.ADDENDUM_CACHE_PREFIX
-else:
-    get_cache_prefix = lambda: 'snippet:'
 
 
 class CachedManager(models.Manager):
