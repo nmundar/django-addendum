@@ -2,6 +2,13 @@ from django.core.cache import cache
 from django.db import models
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from django.conf import settings
+
+
+if hasattr(settings, 'ADDENDUM_CACHE_PREFIX'):
+    get_cache_prefix = settings.ADDENDUM_CACHE_PREFIX
+else:
+    get_cache_prefix = lambda: 'snippet:'
 
 
 class CachedManager(models.Manager):
@@ -18,7 +25,8 @@ class CachedManager(models.Manager):
         value. If this is returned we know that the value should not be present
         in the database, either.
         """
-        snippet = cache.get('snippet:{0}'.format(key))
+        cache_key = '{0}:{1}'.format(get_cache_prefix(), key)
+        snippet = cache.get(cache_key)
 
         if snippet == -1:
             return None
@@ -27,9 +35,9 @@ class CachedManager(models.Manager):
             try:
                 snippet = Snippet.objects.get(key=key)
             except Snippet.DoesNotExist:
-                cache.set('snippet:{0}'.format(key), -1)
+                cache.set(cache_key, -1)
             else:
-                cache.set('snippet:{0}'.format(key), snippet)
+                cache.set(cache_key, snippet)
 
         return snippet
 
@@ -53,11 +61,13 @@ class Snippet(models.Model):
 def set_cached_business(sender, **kwargs):
     """Update the cached copy of the snippet on creation or change"""
     instance = kwargs.pop('instance')
-    cache.set('snippet:{0}'.format(instance.key), instance)
+    cache_key = '{0}:{1}'.format(get_cache_prefix(), instance.key)
+    cache.set(cache_key, instance)
 
 
 @receiver(post_delete, sender=Snippet)
 def clear_cached_business(sender, **kwargs):
     """Remove the cached copy of the snippet after deletion"""
     instance = kwargs.pop('instance')
-    cache.delete('snippet:{0}'.format(instance.key))
+    cache_key = '{0}:{1}'.format(get_cache_prefix(), instance.key)
+    cache.delete(cache_key)
