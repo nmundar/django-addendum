@@ -5,17 +5,30 @@ from __future__ import unicode_literals
 
 import warnings
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
 
+def get_cache_prefix():
+    return 'snippet:'
+
+
+if hasattr(settings, 'ADDENDUM_CACHE_PREFIX'):
+    get_cache_prefix = settings.ADDENDUM_CACHE_PREFIX
+
+
+def get_cache_key(key):
+    return '{0}:{1}'.format(get_cache_prefix(), key)
+
+
 def set_cached_snippet(key, data):
     """
     Adds a dictionary of snippet text and translations to the cache.
     """
-    cache.set('snippet:{0}'.format(key), data)
+    cache.set(get_cache_key(key), data)
 
 
 def get_cached_snippet(key, language=''):
@@ -37,7 +50,7 @@ def get_cached_snippet(key, language=''):
     # TODO on fallback try looking for parent language string, e.g. if 'es-ar'
     # is missing then try looking for 'es'.
 
-    snippet = cache.get('snippet:{0}'.format(key))
+    snippet = cache.get(get_cache_key(key))
 
     # Previous cache miss and DB miss
     if snippet == -1:
@@ -48,7 +61,7 @@ def get_cached_snippet(key, language=''):
         try:
             snippet = Snippet.objects.get(key=key)
         except Snippet.DoesNotExist:
-            cache.set('snippet:{0}'.format(key), -1)
+            cache.set(get_cache_key(key), -1)
             snippet = {'': None}
         else:
             set_cached_snippet(snippet.key, snippet.to_dict())
@@ -67,7 +80,7 @@ class CachedManager(models.Manager):
         """
         warnings.warn("The CachedManager is now deprecated, use get_cached_text instead",
                 DeprecationWarning)
-        snippet = cache.get('snippet:{0}'.format(key))
+        snippet = cache.get(get_cache_key(key))
 
         if snippet == -1:
             return None
@@ -76,9 +89,9 @@ class CachedManager(models.Manager):
             try:
                 snippet = Snippet.objects.get(key=key)
             except Snippet.DoesNotExist:
-                cache.set('snippet:{0}'.format(key), -1)
+                cache.set(get_cache_key(key), -1)
             else:
-                cache.set('snippet:{0}'.format(key), snippet)
+                cache.set(get_cache_key(key), snippet)
 
         return snippet
 
@@ -128,7 +141,7 @@ class Snippet(models.Model):
 
 @receiver(post_delete, sender=Snippet)
 def delete_snippet(instance, **kwargs):
-    cache.delete('snippet:{0}'.format(instance.key))
+    cache.delete(get_cache_key(instance.key))
 
 
 class SnippetTranslation(models.Model):
