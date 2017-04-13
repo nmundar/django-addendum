@@ -11,25 +11,11 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
 
-def set_cached_snippet(key):
+def set_cached_snippet(key, data):
     """
     Adds a dictionary of snippet text and translations to the cache.
-
-    The default text has the key of an empty string.
-
-        {
-            "": "Hello, humans",
-            "es": "Hola, humanos",
-            "en-au": "G'day, humans",
-        }
-
     """
-    text_dict = {
-        trans.language: trans.text for trans in
-        SnippetTranslation.objects.filter(snippet_id=key)
-    }
-    text_dict.update({'': Snippet.objects.get(key=key).text})
-    cache.set('snippet:{0}'.format(key), text_dict)
+    cache.set('snippet:{0}'.format(key), data)
 
 
 def get_cached_snippet(key, language=''):
@@ -65,8 +51,8 @@ def get_cached_snippet(key, language=''):
             cache.set('snippet:{0}'.format(key), -1)
             snippet = {'': None}
         else:
-            set_cached_snippet(key)
-            snippet = cache.get('snippet:{0}'.format(key))
+            set_cached_snippet(snippet.key, snippet.to_dict())
+            snippet = snippet.to_dict()
 
     return snippet.get(language, snippet.get(''))
 
@@ -114,9 +100,29 @@ class Snippet(models.Model):
     def __str__(self):
         return self.key
 
+    def to_dict(self):
+        """
+        Builds a dictionary of snippet text and translations to the cache.
+
+        The default text has the key of an empty string.
+
+            {
+                "": "Hello, humans",
+                "es": "Hola, humanos",
+                "en-au": "G'day, humans",
+            }
+
+        """
+        data = {
+            trans.language: trans.text for trans in
+            SnippetTranslation.objects.filter(snippet_id=self.key)
+        }
+        data.update({'': self.text})
+        return data
+
     def save(self, *args, **kwargs):
         super(Snippet, self).save(*args, **kwargs)
-        set_cached_snippet(self.key)
+        set_cached_snippet(self.key, self.to_dict())
         return self
 
 
@@ -142,7 +148,7 @@ class SnippetTranslation(models.Model):
 
     def save(self, *args, **kwargs):
         super(SnippetTranslation, self).save(*args, **kwargs)
-        set_cached_snippet(self.snippet_id)
+        set_cached_snippet(self.snippet_id, self.snippet.to_dict())
         return self
 
 
@@ -151,4 +157,4 @@ def delete_snippet_translation(instance, **kwargs):
     """
     After removing from the database update the snippet cache values.
     """
-    set_cached_snippet(instance.snippet_id)
+    set_cached_snippet(instance.snippet_id, instance.snippet.to_dict())
