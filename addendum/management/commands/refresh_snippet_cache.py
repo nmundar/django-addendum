@@ -14,7 +14,7 @@ class Command(BaseCommand):
         # Already iterating, skip the extra count query
         count = 0
         for snippet in Snippet.objects.all():
-            set_cached_snippet(snippet.key)
+            set_cached_snippet(snippet.key, snippet.to_dict())
             count += 1
         self.stdout.write(
                 "Refreshed the cache for {0} snippets.".format(count))
